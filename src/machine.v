@@ -334,7 +334,7 @@ module machine (
     set_set_dirs = 0;
     set_out_pins = 0;
     set_out_dirs = 0;
-    irq_flags_out = 0;
+    irq_flags_out = irq_flags_in;
     dout = 0;
     if (enabled && !delaying) begin
       case (op)
@@ -354,7 +354,7 @@ module machine (
         WAIT: case (source2) // Source
                 0: waiting = input_pins[index] != polarity;
                 1: waiting = input_pins[pins_in_base + index] != polarity;
-                2: waiting = irq_flags_out[irq_index] != polarity;
+                2: waiting = irq_flags_in[irq_index] != polarity;
               endcase
         IN:   if (auto_push && isr_count >= isr_threshold) begin // Auto push
                  do_push();

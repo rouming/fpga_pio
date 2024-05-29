@@ -25,6 +25,9 @@ module pio #(
   // Shared instructions memory
   reg [15:0]  instr [0:31];
 
+  // Shared IRQ flags
+  reg [7:0]   irq_flags;
+
   // Configuration
   reg [NUM_MACHINES-1:0]   en;
   reg [NUM_MACHINES-1:0]   auto_pull;
@@ -60,8 +63,19 @@ module pio #(
   reg [4:0]   isr_threshold   [0:NUM_MACHINES-1];
   reg [4:0]   osr_threshold   [0:NUM_MACHINES-1];
   reg [3:0]   status_n        [0:NUM_MACHINES-1];
-  reg [4:0]   out_en_sel      [0:NUM_MACHINES-1];  
+  reg [4:0]   out_en_sel      [0:NUM_MACHINES-1];
   reg [4:0]   jmp_pin         [0:NUM_MACHINES-1];
+
+  // IRQ masks configuration
+  reg [11:0]  irq0_enable;
+  reg [11:0]  irq0_force;
+  reg [11:0]  irq1_enable;
+  reg [11:0]  irq1_force;
+
+  // IRQ statuses
+  wire [11:0] raw_intr;
+  wire [11:0] irq0_status;
+  wire [11:0] irq1_status;
 
   (* mem2reg *) reg [15:0]  curr_instr      [0:NUM_MACHINES-1];
 
@@ -86,6 +100,13 @@ module pio #(
   integer i;
   integer gpio_idx;
 
+  assign raw_intr = {irq_flags, tx_full, rx_empty};
+  assign irq0_status = (raw_intr & irq0_enable) | irq0_force;
+  assign irq1_status = (raw_intr & irq0_enable) | irq0_force;
+
+  assign irq0 = |irq0_status;
+  assign irq1 = |irq1_status;
+
   // Synchronous fetch of current instruction for each machine
   always @(posedge clk) begin
     for(i=0;i<NUM_MACHINES;i=i+1) begin
@@ -106,18 +127,60 @@ module pio #(
     end
   end
 
+  // Coalesce IRQ lines from each machine
+  always @(posedge clk) begin: coalesce_irq
+     reg [7:0] or_flags;
+     reg [7:0] and_flags;
+
+     if (reset) begin
+        irq_flags <= 0;
+     end else begin
+        //
+        // Combinational logic
+        //
+
+        or_flags  = irq_flags_out[0];
+        and_flags = irq_flags_out[0];
+
+        for (i=1; i<NUM_MACHINES; i++) begin
+           or_flags  |= irq_flags_out[i];
+           and_flags &= irq_flags_out[i];
+        end
+
+        //
+        // Infer FF
+        //
+
+        for (i=0; i<8; i++) begin
+           // Detect if any of the machines set an IRQ
+           if (!irq_flags[i] && or_flags[i])
+             irq_flags[i] <= 1;
+           // Detect if any of the machines cleared an IRQ
+           else if (irq_flags[i] && !and_flags[i])
+             irq_flags[i] <= 0;
+        end
+     end
+  end
+
   // Actions
-  localparam NONE  = 0;
-  localparam INSTR = 1;
-  localparam PEND  = 2;
-  localparam PULL  = 3;
-  localparam PUSH  = 4;
-  localparam GRPS  = 5;
-  localparam EN    = 6;
-  localparam DIV   = 7;
-  localparam SIDES = 8;
-  localparam IMM   = 9;
-  localparam SHIFT = 10;
+  localparam NONE      = 0;
+  localparam INSTR     = 1;
+  localparam PEND      = 2;
+  localparam PULL      = 3;
+  localparam PUSH      = 4;
+  localparam GRPS      = 5;
+  localparam EN        = 6;
+  localparam DIV       = 7;
+  localparam SIDES     = 8;
+  localparam IMM       = 9;
+  localparam SHIFT     = 10;
+  localparam INTR      = 11;
+  localparam IRQ0_INTE = 12;
+  localparam IRQ0_INTF = 13;
+  localparam IRQ0_INTS = 14;
+  localparam IRQ1_INTE = 15;
+  localparam IRQ1_INTF = 16;
+  localparam IRQ1_INTS = 17;
 
   // Configure and control machines
   always @(posedge clk) begin
@@ -207,6 +270,34 @@ module pio #(
                  isr_threshold[mindex] <= din[24:20];
                  osr_threshold[mindex] <= din[29:25];
                end
+        INTR: begin
+              // Raw Interrupts
+              dout <= {20'b0, raw_intr};
+              end
+        IRQ0_INTE: begin
+              // Interrupt Enable for irq0
+              dout <= {20'b0, irq0_enable};
+              end
+        IRQ0_INTF: begin
+              // Interrupt Force for irq0
+              dout <= {20'b0, irq0_force};
+              end
+        IRQ0_INTS: begin
+              // Interrupt status after masking & forcing for irq0
+              dout <= {20'b0, irq0_status};
+              end
+        IRQ1_INTE: begin
+              // Interrupt Enable for irq1
+              dout <= {20'b0, irq1_force};
+              end
+        IRQ1_INTF: begin
+              // Interrupt Force for irq1
+              dout <= {20'b0, irq1_force};
+              end
+        IRQ1_INTS: begin
+              // Interrupt status after masking & forcing for irq1
+              dout <= {20'b0, irq1_status};
+              end
         NONE  : dout <= 32'h01000000; // Hardware version number
       endcase
     end
@@ -247,7 +338,7 @@ module pio #(
         .auto_push(auto_push[j]),
         .isr_threshold(isr_threshold[j]),
         .osr_threshold(osr_threshold[j]),
-        .irq_flags_in(8'h0),
+        .irq_flags_in(irq_flags),
         .irq_flags_out(irq_flags_out[j]),
         .pc(pc[j]),
         .din(mdin[j]),
