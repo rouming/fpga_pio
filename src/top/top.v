@@ -1,11 +1,10 @@
 `default_nettype none
 module top (
   input         clk_25mhz,
-  // Buttons
-  input [6:0]   btn,
-  // Leds
-  output [7:0]  led,
-  output [27:0] gn,
+  // Button
+  input         btn,
+  // Led
+  output [2:0]  led,
   output        tx
 );
 
