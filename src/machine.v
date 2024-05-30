@@ -281,7 +281,7 @@ module machine (
     if (reset || restart) begin
       delay_cnt <= 0;
       pin_directions <= 32'h00000000;
-      output_pins <= 32'h00000000;
+      //output_pins <= 32'h00000000;
     end else if (en & penable) begin
       exec1 <= exec; // Do execition on next cycle after exec set
       exec_instr <= new_val;
@@ -295,17 +295,17 @@ module machine (
   always @(posedge clk) begin
     if (enabled && !delaying) begin
       if (sideset_enabled && !(auto && !waiting)) // TODO Is auto test correct?
-        for (i=0;i<5;i++) 
-          if (pins_side_count > i) output_pins[pins_side_base+i] <= side_set[i];
-      if (set_set_pins)
-        for (i=0;i<5;i++) 
-          if (pins_set_count > i) output_pins[pins_set_base+i] <= new_val[i];
+//        for (i=0;i<5;i++) 
+//          if (pins_side_count > i) output_pins[pins_side_base+i] <= side_set[i];
+//      if (set_set_pins)
+//        for (i=0;i<5;i++) 
+//          if (pins_set_count > i) output_pins[pins_set_base+i] <= new_val[i];
       if (set_set_dirs)
         for (i=0;i<5;i++) 
           if (pins_set_count > i) pin_directions[pins_set_base+i] <= new_val[i];
-      if (set_out_pins)
-        for (i=0;i<5;i++) 
-          if (pins_out_count > i) output_pins[pins_out_base+i] <= new_val[i];
+//      if (set_out_pins)
+//        for (i=0;i<5;i++) 
+//          if (pins_out_count > i) output_pins[pins_out_base+i] <= new_val[i];
       if (set_out_dirs)
         for (i=0;i<5;i++) 
           if (pins_out_count > i) pin_directions[pins_out_base+i] <= new_val[i];

@@ -1,6 +1,9 @@
-YOSYS          ?= yosys
-NEXTPNR        ?= nextpnr-himbaechel
-OPENFPGALOADER ?= openFPGALoader
+#YOSYS          ?= yosys
+#NEXTPNR        ?= nextpnr-himbaechel
+#OPENFPGALOADER ?= openFPGALoader
+YOSYS          ?= ../../yosys/yosys
+NEXTPNR        ?= ../../nextpnr/nextpnr-himbaechel
+OPENFPGALOADER ?= ../../openFPGALoader/build/openFPGALoader
 GOWIN_PACK     ?= gowin_pack
 
 BOARD   ?= tangnano20k
