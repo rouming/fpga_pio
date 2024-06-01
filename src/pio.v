@@ -25,6 +25,14 @@ module pio #(
   // Shared instructions memory
   reg [15:0]  instr [0:31];
 
+  // Shared IRQ flags
+  reg [7:0]   irq_flags;
+  reg [7:0]   irq_flags_prev;
+  reg [7:0]   irq_clear_flags;
+  reg [7:0]   irq_set_flags;
+  reg [7:0]   irq_or_flags;
+  reg [7:0]   irq_and_flags;
+
   // Configuration
   reg [NUM_MACHINES-1:0]   en;
   reg [NUM_MACHINES-1:0]   auto_pull;
@@ -60,8 +68,19 @@ module pio #(
   reg [4:0]   isr_threshold   [0:NUM_MACHINES-1];
   reg [4:0]   osr_threshold   [0:NUM_MACHINES-1];
   reg [3:0]   status_n        [0:NUM_MACHINES-1];
-  reg [4:0]   out_en_sel      [0:NUM_MACHINES-1];  
+  reg [4:0]   out_en_sel      [0:NUM_MACHINES-1];
   reg [4:0]   jmp_pin         [0:NUM_MACHINES-1];
+
+  // IRQ masks configuration
+  reg [11:0]  irq0_enable;
+  reg [11:0]  irq0_force;
+  reg [11:0]  irq1_enable;
+  reg [11:0]  irq1_force;
+
+  // IRQ statuses
+  wire [11:0] raw_intr;
+  wire [11:0] irq0_status;
+  wire [11:0] irq1_status;
 
   (* mem2reg *) reg [15:0]  curr_instr      [0:NUM_MACHINES-1];
 
@@ -86,6 +105,13 @@ module pio #(
   integer i;
   integer gpio_idx;
 
+  assign raw_intr = {irq_flags[3:0], tx_full, rx_empty};
+  assign irq0_status = (raw_intr & irq0_enable) | irq0_force;
+  assign irq1_status = (raw_intr & irq0_enable) | irq0_force;
+
+  assign irq0 = |irq0_status;
+  assign irq1 = |irq1_status;
+
   // Synchronous fetch of current instruction for each machine
   always @(posedge clk) begin
     for(i=0;i<NUM_MACHINES;i=i+1) begin
@@ -106,18 +132,64 @@ module pio #(
     end
   end
 
+  // OR and AND each IRQ line from each SM (combinational logic)
+  always @(*) begin
+     // Incorporate external flags from IRQ and IRQ_FORCE actions
+     irq_or_flags  = irq_set_flags;
+     irq_and_flags = ~irq_clear_flags;
+
+     for (i = 0; i < NUM_MACHINES; i++) begin
+        irq_or_flags  |= irq_flags_out[i];
+        irq_and_flags &= irq_flags_out[i];
+     end
+  end
+
+  // Coalesce IRQ lines from each SM
+  always @(posedge clk) begin
+     if (reset) begin
+        irq_flags <= 0;
+        irq_flags_prev <= 0;
+     end else begin
+        irq_flags_prev <= irq_flags;
+        for (i = 0; i < $bits(irq_flags); i++) begin
+           // Detect if any of the machines set an IRQ
+           if (!irq_flags[i] && irq_or_flags[i])
+             irq_flags[i] <= 1;
+           // Detect if any of the machines cleared an IRQ
+           else if (irq_flags[i] && !irq_and_flags[i])
+             irq_flags[i] <= 0;
+        end
+     end
+  end
+
   // Actions
-  localparam NONE  = 0;
-  localparam INSTR = 1;
-  localparam PEND  = 2;
-  localparam PULL  = 3;
-  localparam PUSH  = 4;
-  localparam GRPS  = 5;
-  localparam EN    = 6;
-  localparam DIV   = 7;
-  localparam SIDES = 8;
-  localparam IMM   = 9;
-  localparam SHIFT = 10;
+  localparam NONE           = 0;
+  localparam INSTR          = 1;
+  localparam PEND           = 2;
+  localparam PULL           = 3;
+  localparam PUSH           = 4;
+  localparam GRPS           = 5;
+  localparam EN             = 6;
+  localparam DIV            = 7;
+  localparam SIDES          = 8;
+  localparam IMM            = 9;
+  localparam SHIFT          = 10;
+  // IRQ read registers
+  localparam RD_IRQ         = 11;
+  localparam RD_INTR        = 12;
+  localparam RD_IRQ0_INTE   = 13;
+  localparam RD_IRQ0_INTF   = 14;
+  localparam RD_IRQ0_INTS   = 15;
+  localparam RD_IRQ1_INTE   = 16;
+  localparam RD_IRQ1_INTF   = 17;
+  localparam RD_IRQ1_INTS   = 18;
+  // IRQ write registers
+  localparam WR_IRQ         = 19;
+  localparam WR_IRQ_FORCE   = 20;
+  localparam WR_IRQ0_INTE   = 21;
+  localparam WR_IRQ0_INTF   = 22;
+  localparam WR_IRQ1_INTE   = 23;
+  localparam WR_IRQ1_INTF   = 24;
 
   // Configure and control machines
   always @(posedge clk) begin
@@ -133,6 +205,10 @@ module pio #(
       inline_out_en <= 0;
       side_pindir <= 0;
       exec_stalled <= 0;
+      irq0_enable <= 0;
+      irq0_force <= 0;
+      irq1_enable <= 0;
+      irq1_force <= 0;
       for(i=0;i<NUM_MACHINES;i++) begin
         pend[i] <= 0;
         wrap_target[i] <= 0;
@@ -160,6 +236,8 @@ module pio #(
       imm <= 0;
       restart <= 0;
       clkdiv_restart <= 0;
+      irq_clear_flags <= 0;
+      irq_set_flags <= 0;
       case (action)
         INSTR: instr[index] <= din[15:0];         // Set an instruction. INSTR_MEM registers
         PEND : begin                              // Configure pend, wrap_target, etc.
@@ -207,6 +285,71 @@ module pio #(
                  isr_threshold[mindex] <= din[24:20];
                  osr_threshold[mindex] <= din[29:25];
                end
+
+        //
+        // IRQ read registers
+        //
+        RD_IRQ: begin
+              // State machine IRQ flags register
+              dout <= {24'b0, irq_flags};
+              end
+        RD_INTR: begin
+              // Raw Interrupts
+              dout <= {20'b0, raw_intr};
+              end
+        RD_IRQ0_INTE: begin
+              // Interrupt Enable for irq0
+              dout <= {20'b0, irq0_enable};
+              end
+        RD_IRQ0_INTF: begin
+              // Interrupt Force for irq0
+              dout <= {20'b0, irq0_force};
+              end
+        RD_IRQ0_INTS: begin
+              // Interrupt status after masking & forcing for irq0
+              dout <= {20'b0, irq0_status};
+              end
+        RD_IRQ1_INTE: begin
+              // Interrupt Enable for irq1
+              dout <= {20'b0, irq1_enable};
+              end
+        RD_IRQ1_INTF: begin
+              // Interrupt Force for irq1
+              dout <= {20'b0, irq1_force};
+              end
+        RD_IRQ1_INTS: begin
+              // Interrupt status after masking & forcing for irq1
+              dout <= {20'b0, irq1_status};
+              end
+
+        //
+        // IRQ write registers
+        //
+        WR_IRQ: begin
+              // Clear IRQ flags
+              irq_clear_flags <= din[7:0];
+              end
+        WR_IRQ_FORCE: begin
+              // Set IRQ force
+              irq_set_flags <= din[7:0];
+              end
+        WR_IRQ0_INTE: begin
+              // Interrupt Enable for irq0
+              irq0_enable <= din[11:0];
+              end
+        WR_IRQ0_INTF: begin
+              // Interrupt Force for irq0
+              irq0_force <= din[11:0];
+              end
+        WR_IRQ1_INTE: begin
+              // Interrupt Enable for irq1
+              irq1_enable <= din[11:0];
+              end
+        WR_IRQ1_INTF: begin
+              // Interrupt Force for irq1
+              irq1_force <= din[11:0];
+              end
+
         NONE  : dout <= 32'h01000000; // Hardware version number
       endcase
     end
@@ -247,7 +390,8 @@ module pio #(
         .auto_push(auto_push[j]),
         .isr_threshold(isr_threshold[j]),
         .osr_threshold(osr_threshold[j]),
-        .irq_flags_in(8'h0),
+        .irq_flags_in(irq_flags),
+        .irq_flags_in_prev(irq_flags_prev),
         .irq_flags_out(irq_flags_out[j]),
         .pc(pc[j]),
         .din(mdin[j]),
