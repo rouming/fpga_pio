@@ -117,6 +117,8 @@ module pio #(
      if (reset) begin
         gpio_out <= 0;
         gpio_dir <= 0;
+        for (i = 0; i < 32; i++)
+          instr[i] <= 0;
      end else begin
         for (i = 0; i < NUM_MACHINES; i++) begin
            curr_instr[i] <= instr[pc[i]];
