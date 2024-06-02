@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2022 Lawrie Griffiths
 // SPDX-License-Identifier: BSD-2-Clause
 
+`include "defines.vh"
+
 `default_nettype none
 module pio #(
   parameter NUM_MACHINES = 4
@@ -189,37 +191,6 @@ module pio #(
      end
   end
 
-  // Actions
-  localparam NONE           = 0;
-  localparam INSTR          = 1;
-  localparam PEND           = 2;
-  localparam PULL           = 3;
-  localparam PUSH           = 4;
-  localparam GRPS           = 5;
-  localparam EN             = 6;
-  localparam DIV            = 7;
-  localparam SIDES          = 8;
-  localparam IMM            = 9;
-  localparam SHIFT          = 10;
-  // IRQ read registers
-  localparam RD_IRQ         = 11;
-  localparam RD_INTR        = 12;
-  localparam RD_IRQ0_INTE   = 13;
-  localparam RD_IRQ0_INTF   = 14;
-  localparam RD_IRQ0_INTS   = 15;
-  localparam RD_IRQ1_INTE   = 16;
-  localparam RD_IRQ1_INTF   = 17;
-  localparam RD_IRQ1_INTS   = 18;
-  // IRQ write registers
-  localparam WR_IRQ         = 19;
-  localparam WR_IRQ_FORCE   = 20;
-  localparam WR_IRQ0_INTE   = 21;
-  localparam WR_IRQ0_INTF   = 22;
-  localparam WR_IRQ1_INTE   = 23;
-  localparam WR_IRQ1_INTF   = 24;
-  //
-  localparam IN_SYNC_BYPASS = 25;
-
   // Configure and control machines
   always @(posedge clk) begin
     if (reset) begin
@@ -265,8 +236,8 @@ module pio #(
       irq_clear_flags <= 0;
       irq_set_flags <= 0;
       case (action)
-        INSTR: instr[index] <= din[15:0];         // Set an instruction. INSTR_MEM registers
-        PEND : begin                              // Configure pend, wrap_target, etc.
+        `INSTR: instr[index] <= din[15:0];         // Set an instruction. INSTR_MEM registers
+        `PEND : begin                              // Configure pend, wrap_target, etc.
                  status_n[mindex] <= din[3:0];
                  status_sel[mindex] <= din[4];
                  wrap_target[mindex] <= din[11:7];
@@ -279,12 +250,12 @@ module pio #(
                  sideset_enable_bit[mindex] <= din[30];
                  exec_stalled[mindex] <= din[31];
                end
-        PULL : begin                              // Pull value from fifo 
+        `PULL : begin                              // Pull value from fifo
                  pull[mindex] <= 1; 
                  dout <= pdout[mindex]; 
                end
-        PUSH : push[mindex] <= 1;                 // Push a value to fifo
-        GRPS : begin                              // Configure pin groups. PIN_CTRL registers
+        `PUSH : push[mindex] <= 1;                 // Push a value to fifo
+        `GRPS : begin                              // Configure pin groups. PIN_CTRL registers
                  pins_out_base[mindex]   <= din[4:0];
                  pins_set_base[mindex]   <= din[9:5];
                  pins_side_base[mindex]  <= din[14:10];
@@ -293,17 +264,17 @@ module pio #(
                  pins_set_count[mindex]  <= din[28:26];
                  pins_side_count[mindex] <= din[31:29];
                end
-        EN   : begin                              // Enable machines
+        `EN   : begin                              // Enable machines
                  en <= din[3:0];                  // Equivalent of CTRL register
                  restart <= din[7:4];
                  clkdiv_restart <= din[11:8];
                end
-        DIV  : begin
+        `DIV  : begin
                  div[mindex] <= din[23:0];        // Configure clock dividers. CLKDIV registers
                  use_divider[mindex] <= din[23:0] >= 24'h200;  // Use divider if clock divider is 2 or more
                end
-        IMM  : imm[mindex] <= 1;                  // Immediate instruction
-        SHIFT: begin
+        `IMM  : imm[mindex] <= 1;                  // Immediate instruction
+        `SHIFT: begin
                  auto_push[mindex] <= din[16];    // SHIFT_CTRL
                  auto_pull[mindex] <= din[17];
                  in_shift_dir[mindex] <= din[18];
@@ -315,35 +286,35 @@ module pio #(
         //
         // IRQ read registers
         //
-        RD_IRQ: begin
+        `RD_IRQ: begin
               // State machine IRQ flags register
               dout <= {24'b0, irq_flags};
               end
-        RD_INTR: begin
+        `RD_INTR: begin
               // Raw Interrupts
               dout <= {20'b0, raw_intr};
               end
-        RD_IRQ0_INTE: begin
+        `RD_IRQ0_INTE: begin
               // Interrupt Enable for irq0
               dout <= {20'b0, irq0_enable};
               end
-        RD_IRQ0_INTF: begin
+        `RD_IRQ0_INTF: begin
               // Interrupt Force for irq0
               dout <= {20'b0, irq0_force};
               end
-        RD_IRQ0_INTS: begin
+        `RD_IRQ0_INTS: begin
               // Interrupt status after masking & forcing for irq0
               dout <= {20'b0, irq0_status};
               end
-        RD_IRQ1_INTE: begin
+        `RD_IRQ1_INTE: begin
               // Interrupt Enable for irq1
               dout <= {20'b0, irq1_enable};
               end
-        RD_IRQ1_INTF: begin
+        `RD_IRQ1_INTF: begin
               // Interrupt Force for irq1
               dout <= {20'b0, irq1_force};
               end
-        RD_IRQ1_INTS: begin
+        `RD_IRQ1_INTS: begin
               // Interrupt status after masking & forcing for irq1
               dout <= {20'b0, irq1_status};
               end
@@ -351,35 +322,35 @@ module pio #(
         //
         // IRQ write registers
         //
-        WR_IRQ: begin
+        `WR_IRQ: begin
               // Clear IRQ flags
               irq_clear_flags <= din[7:0];
               end
-        WR_IRQ_FORCE: begin
+        `WR_IRQ_FORCE: begin
               // Set IRQ force
               irq_set_flags <= din[7:0];
               end
-        WR_IRQ0_INTE: begin
+        `WR_IRQ0_INTE: begin
               // Interrupt Enable for irq0
               irq0_enable <= din[11:0];
               end
-        WR_IRQ0_INTF: begin
+        `WR_IRQ0_INTF: begin
               // Interrupt Force for irq0
               irq0_force <= din[11:0];
               end
-        WR_IRQ1_INTE: begin
+        `WR_IRQ1_INTE: begin
               // Interrupt Enable for irq1
               irq1_enable <= din[11:0];
               end
-        WR_IRQ1_INTF: begin
+        `WR_IRQ1_INTF: begin
               // Interrupt Force for irq1
               irq1_force <= din[11:0];
               end
-        //
-        IN_SYNC_BYPASS: begin
+        // Rest
+        `IN_SYNC_BYPASS: begin
               in_sync_bypass <= din;
               end
-        NONE  : dout <= 32'h01000000; // Hardware version number
+        `NONE  : dout <= 32'h01000000; // Hardware version number
       endcase
     end
   end

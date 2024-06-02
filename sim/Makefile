@@ -3,7 +3,7 @@ VERILOG_FILES = ../src/pio.v ../src/machine.v ../src/decoder.v ../src/divider.v 
 TB ?= tb
 
 ${TB}: *.v
-	iverilog -o tb ${TB}.v ${VERILOG_FILES}
+	iverilog -o tb ${TB}.v ${VERILOG_FILES} -I ../src
 
 sim: ${TB}
 	./tb
