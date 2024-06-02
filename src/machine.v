@@ -44,6 +44,8 @@ module machine (
   output reg    pull, // Get data from TX FIFO
   output reg [31:0] dout,
   output reg [31:0] output_pins,
+  output reg [31:0] output_pins_mask,
+  output reg [31:0] pin_directions_mask,
   output reg [31:0] pin_directions,
   output reg [7:0]  irq_flags_out,
   output        pclk
@@ -293,8 +295,6 @@ module machine (
   always @(posedge clk) begin
     if (reset || restart) begin
       delay_cnt <= 0;
-      pin_directions <= 32'h00000000;
-      output_pins <= 32'h00000000;
     end else if (en & penable) begin
       exec1 <= exec; // Do execition on next cycle after exec set
       exec_instr <= new_val;
@@ -302,29 +302,9 @@ module machine (
       else if (!waiting && !exec && delay > 0) delay_cnt <= delay;
     end
   end
- 
+
   integer i;
 
-  always @(posedge clk) begin
-    if (enabled && !delaying) begin
-      if (sideset_enabled && !(auto && !waiting)) // TODO Is auto test correct?
-        for (i=0;i<5;i++) 
-          if (pins_side_count > i) output_pins[pins_side_base+i] <= side_set[i];
-      if (set_set_pins)
-        for (i=0;i<5;i++) 
-          if (pins_set_count > i) output_pins[pins_set_base+i] <= new_val[i];
-      if (set_set_dirs)
-        for (i=0;i<5;i++) 
-          if (pins_set_count > i) pin_directions[pins_set_base+i] <= new_val[i];
-      if (set_out_pins)
-        for (i=0;i<32;i++)
-          if (pins_out_count > i) output_pins[pins_out_base+i] <= new_val[i];
-      if (set_out_dirs)
-        for (i=0;i<32;i++)
-          if (pins_out_count > i) pin_directions[pins_out_base+i] <= new_val[i];
-    end
-  end
-  
   // Execute the current instruction
   always @* begin
     jmp  = 0;
@@ -347,6 +327,10 @@ module machine (
     set_set_dirs = 0;
     set_out_pins = 0;
     set_out_dirs = 0;
+    output_pins_mask = 0;
+    output_pins = 0;
+    pin_directions = 0;
+    pin_directions_mask = 0;
     irq_flags_out = irq_flags_in;
     dout = 0;
     if (enabled && !delaying) begin
@@ -486,7 +470,41 @@ module machine (
                 2: set_y({27'b0, data});                     // Y
                 4: dirs_set(data);                           // PINDIRS
               endcase
-      endcase
+      endcase // case (op)
+
+      //
+      // Handle output pins and directions
+      //
+      if (sideset_enabled && !(auto && !waiting)) // TODO Is auto test correct?
+        for (i = 0; i < 5; i++)
+          if (i < pins_side_count) begin
+             output_pins_mask[pins_side_base + i] = 1;
+             output_pins[pins_side_base + i] = side_set[i];
+          end
+      if (set_set_pins)
+        for (i = 0; i < 5; i++)
+          if (i < pins_set_count) begin
+             output_pins_mask[pins_side_base + i] = 1;
+             output_pins[pins_set_base + i] = new_val[i];
+          end
+      if (set_set_dirs)
+        for (i = 0; i < 5; i++)
+          if (i < pins_set_count) begin
+             pin_directions_mask[pins_set_base + i] = 1;
+             pin_directions[pins_set_base + i] = new_val[i];
+          end
+      if (set_out_pins)
+        for (i = 0; i < 32; i++)
+          if (i < pins_out_count) begin
+             output_pins_mask[pins_out_base + i] = 1;
+             output_pins[pins_out_base + i] = new_val[i];
+          end
+      if (set_out_dirs)
+        for (i = 0; i < 32; i++)
+          if (i < pins_out_count) begin
+             pin_directions_mask[pins_out_base + i] = 1;
+             pin_directions[pins_out_base + i] = new_val[i];
+          end
     end
   end
 

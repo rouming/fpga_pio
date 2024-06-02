@@ -85,10 +85,10 @@ module pio #(
   (* mem2reg *) reg [15:0]  curr_instr      [0:NUM_MACHINES-1];
 
   // Output from machines and fifos
+  wire [31:0] output_pins_mask    [0:NUM_MACHINES-1];
   wire [31:0] output_pins         [0:NUM_MACHINES-1];
-  reg  [31:0] output_pins_prev    [0:NUM_MACHINES-1];
+  wire [31:0] pin_directions_mask [0:NUM_MACHINES-1];
   wire [31:0] pin_directions      [0:NUM_MACHINES-1];
-  reg  [31:0] pin_directions_prev [0:NUM_MACHINES-1];
   wire [4:0]  pc                  [0:NUM_MACHINES-1];
   wire [31:0] mdin                [0:NUM_MACHINES-1];
   wire [31:0] mdout               [0:NUM_MACHINES-1];
@@ -114,21 +114,21 @@ module pio #(
 
   // Synchronous fetch of current instruction for each machine
   always @(posedge clk) begin
-    for(i=0;i<NUM_MACHINES;i=i+1) begin
-      curr_instr[i] <= instr[pc[i]];
+     if (reset) begin
+        gpio_out <= 0;
+        gpio_dir <= 0;
+     end else begin
+        for (i = 0; i < NUM_MACHINES; i++) begin
+           curr_instr[i] <= instr[pc[i]];
 
-      // Coalesce output pins, making sure the highest PIO wins
-      for(gpio_idx=0;gpio_idx<32;gpio_idx=gpio_idx+1) begin
-        output_pins_prev[i][gpio_idx] <= output_pins[i][gpio_idx];
-        if (output_pins[i][gpio_idx] != output_pins_prev[i][gpio_idx]) begin
-          gpio_out[gpio_idx] <= output_pins[i][gpio_idx];
+           // Coalesce output pins, making sure the highest SM wins
+           for (gpio_idx = 0; gpio_idx < 32; gpio_idx++) begin
+              if (output_pins_mask[i][gpio_idx])
+                gpio_out[gpio_idx] <= output_pins[i][gpio_idx];
+              if (pin_directions_mask[i][gpio_idx])
+                gpio_dir[gpio_idx] <= pin_directions[i][gpio_idx];
+           end
         end
-
-        pin_directions_prev[i][gpio_idx] <= pin_directions[i][gpio_idx];
-        if (pin_directions[i][gpio_idx] != pin_directions_prev[i][gpio_idx]) begin
-          gpio_dir[gpio_idx] <= pin_directions[i][gpio_idx];
-        end
-      end
     end
   end
 
@@ -225,11 +225,7 @@ module pio #(
         status_n[i] <= 0;
         out_en_sel[i] <= 0;
         jmp_pin[i] <= 0;
-        output_pins_prev[i] <= 0;
-        pin_directions_prev[i] <= 0;
       end
-      gpio_out <= 0;
-      gpio_dir <= 0;
     end else begin
       pull <= 0;
       push <= 0;
@@ -368,7 +364,9 @@ module pio #(
         .mindex(j[1:0]),
         .jmp_pin(jmp_pin[j]),
         .input_pins(gpio_in),
+        .output_pins_mask(output_pins_mask[j]),
         .output_pins(output_pins[j]),
+        .pin_directions_mask(pin_directions_mask[j]),
         .pin_directions(pin_directions[j]),
         .sideset_enable_bit(pins_side_count[j] > 0 ? sideset_enable_bit[j] : 1'b0),
         .in_shift_dir(in_shift_dir[j]),
