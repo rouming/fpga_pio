@@ -538,8 +538,9 @@ module machine (
     .penable(en & penable),
     .reset(reset | restart),
     .din(new_val[4:0]),
+    .imm(imm),
     .jmp(jmp),
-    .stalled(waiting || auto || imm || exec1 || delaying),
+    .stalled(waiting || auto || exec1 || delaying),
     .pend(pend),
     .wrap_target(wrap_target),
     .dout(pc)
