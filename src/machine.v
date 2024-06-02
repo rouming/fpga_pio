@@ -484,7 +484,7 @@ module machine (
       if (set_set_pins)
         for (i = 0; i < 5; i++)
           if (i < pins_set_count) begin
-             output_pins_mask[pins_side_base + i] = 1;
+             output_pins_mask[pins_set_base + i] = 1;
              output_pins[pins_set_base + i] = new_val[i];
           end
       if (set_set_dirs)

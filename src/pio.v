@@ -70,6 +70,11 @@ module pio #(
   reg [3:0]   status_n        [0:NUM_MACHINES-1];
   reg [4:0]   out_en_sel      [0:NUM_MACHINES-1];
   reg [4:0]   jmp_pin         [0:NUM_MACHINES-1];
+  reg [31:0]  in_sync_bypass;
+  reg [31:0]  in_pins;
+  reg [31:0]  in_pins_sync_0;
+  reg [31:0]  in_pins_sync_1;
+  reg [31:0]  in_pins_sync_2;
 
   // IRQ masks configuration
   reg [11:0]  irq0_enable;
@@ -112,14 +117,34 @@ module pio #(
   assign irq0 = |irq0_status;
   assign irq1 = |irq1_status;
 
+  // Select input pin (combinational logic)
+  always @(*) begin
+     for (i = 0; i < $bits(in_pins); i++) begin
+        in_pins[i] = in_sync_bypass[i] ?
+              in_pins_sync_0[i] :
+              in_pins_sync_2[i];
+     end
+  end
+
   // Synchronous fetch of current instruction for each machine
+  // and GPIO input and output.
   always @(posedge clk) begin
      if (reset) begin
         gpio_out <= 0;
         gpio_dir <= 0;
+        in_pins_sync_0 <= 0;
+        in_pins_sync_1 <= 0;
+        in_pins_sync_2 <= 0;
         for (i = 0; i < 32; i++)
           instr[i] <= 0;
      end else begin
+        // Store GPIO input
+        in_pins_sync_0 <= gpio_in;
+        // 2-FF synchronizer
+        in_pins_sync_1 <= in_pins_sync_0;
+        in_pins_sync_2 <= in_pins_sync_1;
+
+        // Handle GPIO output and instruction for each SM
         for (i = 0; i < NUM_MACHINES; i++) begin
            curr_instr[i] <= instr[pc[i]];
 
@@ -192,6 +217,8 @@ module pio #(
   localparam WR_IRQ0_INTF   = 22;
   localparam WR_IRQ1_INTE   = 23;
   localparam WR_IRQ1_INTF   = 24;
+  //
+  localparam IN_SYNC_BYPASS = 25;
 
   // Configure and control machines
   always @(posedge clk) begin
@@ -211,6 +238,7 @@ module pio #(
       irq0_force <= 0;
       irq1_enable <= 0;
       irq1_force <= 0;
+      in_sync_bypass <= 0;
       for(i=0;i<NUM_MACHINES;i++) begin
         pend[i] <= 0;
         wrap_target[i] <= 0;
@@ -347,7 +375,10 @@ module pio #(
               // Interrupt Force for irq1
               irq1_force <= din[11:0];
               end
-
+        //
+        IN_SYNC_BYPASS: begin
+              in_sync_bypass <= din;
+              end
         NONE  : dout <= 32'h01000000; // Hardware version number
       endcase
     end
@@ -365,7 +396,7 @@ module pio #(
         .restart(restart[j]),
         .mindex(j[1:0]),
         .jmp_pin(jmp_pin[j]),
-        .input_pins(gpio_in),
+        .input_pins(in_pins),
         .output_pins_mask(output_pins_mask[j]),
         .output_pins(output_pins[j]),
         .pin_directions_mask(pin_directions_mask[j]),
