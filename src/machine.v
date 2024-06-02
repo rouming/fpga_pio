@@ -238,7 +238,13 @@ module machine (
   );
     begin
       set_out_pins = 1;
-      new_val = val;
+      if (val == 0)
+        // As described in the original rp2040 pdf, 3.4.5.2 section:
+        // "Bit count: how many bits to shift out of the OSR. 1…32
+        // bits, 32 is encoded as 00000".
+        new_val = ~0;
+      else
+        new_val = val;
     end
   endtask
 
@@ -247,7 +253,13 @@ module machine (
   );
     begin
       set_out_dirs = 1;
-      new_val = val;
+      if (val == 0)
+        // As described in the original rp2040 pdf, 3.4.5.2 section:
+        // "Bit count: how many bits to shift out of the OSR. 1…32
+        // bits, 32 is encoded as 00000".
+        new_val = ~0;
+      else
+        new_val = val;
     end
   endtask
 
@@ -305,10 +317,10 @@ module machine (
         for (i=0;i<5;i++) 
           if (pins_set_count > i) pin_directions[pins_set_base+i] <= new_val[i];
       if (set_out_pins)
-        for (i=0;i<5;i++) 
+        for (i=0;i<32;i++)
           if (pins_out_count > i) output_pins[pins_out_base+i] <= new_val[i];
       if (set_out_dirs)
-        for (i=0;i<5;i++) 
+        for (i=0;i<32;i++)
           if (pins_out_count > i) pin_directions[pins_out_base+i] <= new_val[i];
     end
   end
