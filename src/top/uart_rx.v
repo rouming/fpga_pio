@@ -21,7 +21,7 @@ module top (
   // PIO registers and wires
   reg [31:0]  din;        // Data sent to PIO
   reg [4:0]   index;      // Instruction index
-  reg [3:0]   action;     // Action to be done by PIO
+  reg [5:0]   action;     // Action to be done by PIO
   reg [1:0]   mindex;     // Machine index
   wire [31:0]  gpio_in;    // Input pins to PIO
 

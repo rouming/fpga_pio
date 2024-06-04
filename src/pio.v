@@ -10,7 +10,7 @@ module pio #(
   input [1:0]       mindex,
   input [31:0]      din,
   input [4:0]       index,
-  input [3:0]       action,
+  input [5:0]       action,
   input [31:0]      gpio_in,
   output reg [31:0]     gpio_out,
   output reg [31:0]     gpio_dir,

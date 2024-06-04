@@ -22,7 +22,7 @@ module tb();
   // PIO inputs
   reg [31:0]  din;
   reg [4:0]   index;
-  reg [3:0]   action;
+  reg [5:0]   action;
   reg [1:0]   mindex;
   reg [31:0]  gpio_in = 0; 
   
